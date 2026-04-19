@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Advanced Attendance App</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+    margin:0;
+    font-family:Arial;
+    background:linear-gradient(135deg,#667eea,#764ba2);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+.card{
+    background:white;
+    padding:25px;
+    width:350px;
+    border-radius:15px;
+    box-shadow:0 10px 25px rgba(0,0,0,0.3);
+    text-align:center;
+}
+input,select{
+    width:95%;
+    padding:10px;
+    margin:6px 0;
+    border-radius:8px;
+    border:1px solid #ccc;
+}
+.password-box{
+    position:relative;
+    width:100%;
+    margin:auto;
+}
+.password-box input{
+    width:85%;
+    padding-right:50px;
+}
+.eye-box{
+    position:absolute;
+    right:-15px;
+    top:50%;
+    transform:translateY(-50%);
+    width:35px;
+    height:35px;
+    background:white;
+    border-radius:8px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:white;
+    cursor:pointer;
+    font-size:16px;
+}
+.eye-box:hover{
+    background:white;
+}
+button{
+    width:100%;
+    padding:10px;
+    margin:5px 0;
+    border:none;
+    border-radius:8px;
+    color:white;
+    cursor:pointer;
+}
+.green{background:green;}
+.red{background:red;}
+.orange{background:orange;}
+.blue{background:blue;}
+.black{background:black;}
+.hidden{display:none;}
+table{
+    width:100%;
+    font-size:12px;
+    margin-top:10px;
+    border-collapse:collapse;
+}
+th,td{
+    border:1px solid #ccc;
+    padding:5px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+<div class="card" id="loginPage">
+<h2>Login</h2>
+
+<select id="role">
+<option value="user">User</option>
+<option value="admin">Admin</option>
+</select>
+
+<input type="email" id="email" placeholder="Email">
+
+<div class="password-box">
+    <input type="password" id="password" placeholder="Password">
+    <div class="eye-box" onclick="togglePassword()">👁</div>
+</div>
+
+<button style="background:#667eea" onclick="login()">Login</button>
+<button style="background:#db4437" onclick="googleLogin()">Login with Google</button>
+
+<p id="loginStatus"></p>
+</div>
+
+<!-- USER PANEL -->
+<div class="card hidden" id="userPage">
+<h2>User Attendance</h2>
+<p id="userEmail"></p>
+
+<button class="green" onclick="markIn()">Mark In</button>
+<button class="red" onclick="markOut()">Mark Out</button>
+<button class="orange" onclick="weekOff()">Week Off</button>
+<button class="blue" onclick="leave()">Leave</button>
+<button onclick="logout()" class="black">Logout</button>
+
+<p id="status"></p>
+</div>
+
+<!-- ADMIN PANEL -->
+<div class="card hidden" id="adminPage">
+<h2>Admin Dashboard</h2>
+<button onclick="loadData()" class="black">Refresh Data</button>
+<button onclick="logout()" class="red">Logout</button>
+
+<div style="max-height:200px;overflow:auto;">
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Date</th>
+<th>In</th>
+<th>Out</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody id="tableData"></tbody>
+</table>
+</div>
+</div>
+
+<!-- Firebase v8 -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+<script>
+
+// 🔴 REPLACE WITH YOUR REAL FIREBASE CONFIG
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+/* PASSWORD TOGGLE */
+function togglePassword(){
+    const passField = document.getElementById("password");
+    const eye = document.querySelector(".eye-box");
+
+    if(passField.type === "password"){
+        passField.type = "text";
+        eye.textContent = "🙈";
+    }else{
+        passField.type = "password";
+        eye.textContent = "👁";
+    }
+}
+
+// EMAIL LOGIN
+function login(){
+    const email = document.getElementById("email").value;
+    const pass = document.getElementById("password").value;
+    const role = document.getElementById("role").value;
+
+    auth.signInWithEmailAndPassword(email, pass)
+    .then(() => {
+        openPanel(role, auth.currentUser.email);
+    })
+    .catch((error) => {
+        document.getElementById("loginStatus").innerText = error.message;
+    });
+}
+
+// GOOGLE LOGIN
+function googleLogin(){
+    const provider = new firebase.auth.GoogleAuthProvider();
+
+    auth.signInWithPopup(provider)
+    .then((result)=>{
+        openPanel("user", result.user.email);
+    })
+    .catch((error)=>{
+        alert(error.message);
+    });
+}
+
+// AUTO LOGIN
+auth.onAuthStateChanged(function(user){
+    if(user){
+        openPanel("user", user.email);
+    }
+});
+
+function openPanel(role, email){
+    document.getElementById("loginPage").classList.add("hidden");
+
+    if(role === "admin"){
+        document.getElementById("adminPage").classList.remove("hidden");
+        loadData();
+    }else{
+        document.getElementById("userPage").classList.remove("hidden");
+        document.getElementById("userEmail").innerText = email;
+    }
+}
+
+// LOGOUT
+function logout(){
+    auth.signOut();
+    location.reload();
+}
+
+// DATE & TIME
+function today(){
+    return new Date().toISOString().split('T')[0];
+}
+function time(){
+    return new Date().toLocaleTimeString();
+}
+
+// SAVE ATTENDANCE
+function saveAttendance(status, inTime="", outTime=""){
+    const user = auth.currentUser;
+    if(!user){
+        alert("Please login first");
+        return;
+    }
+
+    db.collection("attendance").add({
+        name: user.email,
+        date: today(),
+        inTime: inTime,
+        outTime: outTime,
+        status: status
+    })
+    .then(()=>{
+        document.getElementById("status").innerText = status + " Saved Successfully";
+    })
+    .catch(error=>{
+        alert(error.message);
+    });
+}
+
+// BUTTON ACTIONS
+function markIn(){ saveAttendance("Present", time(), ""); }
+function markOut(){ saveAttendance("Present", "", time()); }
+function weekOff(){ saveAttendance("Week Off"); }
+function leave(){ saveAttendance("Leave"); }
+
+// ADMIN LOAD
+function loadData(){
+    const table = document.getElementById("tableData");
+    table.innerHTML = "";
+
+    db.collection("attendance").orderBy("date","desc").get()
+    .then(snapshot=>{
+        snapshot.forEach(doc=>{
+            const d = doc.data();
+            table.innerHTML += `
+            <tr>
+                <td>${d.name}</td>
+                <td>${d.date}</td>
+                <td>${d.inTime || ""}</td>
+                <td>${d.outTime || ""}</td>
+                <td>${d.status}</td>
+            </tr>`;
+        });
+    })
+    .catch(error=>{
+        alert(error.message);
+    });
+}
+
+</script>
+
+</body>
+</html>
